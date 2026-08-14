@@ -32,36 +32,39 @@ void main() {
   vec2 mouseP = uMouse - 0.5;
   mouseP.x *= aspect;
 
-  // the gradient is one continuous wave — a smooth, low-frequency curve,
-  // never noise. It is completely still until the mouse moves.
-  float baseY =
-    sin(p.x * uScale * 2.0 + 0.6) * 0.16 * uDistortion +
-    sin(p.x * uScale * 0.8 - 1.1) * 0.09 * uDistortion;
+  // the whole field bends as one smooth, low-frequency shape — never noise —
+  // so it is completely still until the mouse moves.
+  vec2 warp;
+  warp.x = sin(p.y * 2.0 + 0.4) * 0.1 * uDistortion;
+  warp.y = sin(p.x * 2.0 - 0.7) * 0.1 * uDistortion;
 
-  // the mouse bends the wave locally, like a radius pulling/pushing the
-  // curve toward the cursor — the shape itself deforms, nothing shreds.
-  float dx = p.x - mouseP.x;
-  float bump = exp(-(dx * dx) / (2.0 * 0.1));
-  float pull = (mouseP.y - baseY) * bump * uMouseInfluence * 0.95;
+  // the mouse pushes the whole color field locally, the mesh points
+  // deform around it, nothing shreds into noise and no grid is ever drawn.
+  vec2 toMouse = p - mouseP;
+  float dist = length(toMouse);
+  float radius = 0.65;
+  float influence = uMouseInfluence * smoothstep(radius, 0.0, dist);
+  vec2 pushDir = toMouse / max(dist, 0.0001);
+  vec2 push = pushDir * influence * influence * 0.5;
 
-  float waveY = baseY + pull;
+  vec2 wp = p + warp + push;
 
-  float d = p.y - waveY;
-  float width = 0.1;
-  float band = smoothstep(width, width * 0.15, abs(d));
+  // an invisible mesh of 3 color anchor points, blended smoothly across
+  // the whole canvas — this is the actual "gradient mesh" technique.
+  vec2 pt1 = vec2(-0.5, 0.42);
+  vec2 pt2 = vec2(0.55, 0.4);
+  vec2 pt3 = vec2(0.05, -0.5);
 
-  // hue sweeps along the length of the wave
-  float along = clamp(p.x / aspect + 0.5, 0.0, 1.0);
-  vec3 gradient = mix(uColor1, uColor2, smoothstep(0.0, 0.5, along));
-  gradient = mix(gradient, uColor3, smoothstep(0.5, 1.0, along));
+  float sigma = 0.55 * uScale;
+  float w1 = exp(-dot(wp - pt1, wp - pt1) / (2.0 * sigma * sigma));
+  float w2 = exp(-dot(wp - pt2, wp - pt2) / (2.0 * sigma * sigma));
+  float w3 = exp(-dot(wp - pt3, wp - pt3) / (2.0 * sigma * sigma));
 
-  // bright core running through the middle of the ribbon
-  float core = smoothstep(width * 0.4, 0.0, abs(d));
-  vec3 color = gradient * band + vec3(1.0) * core * 0.55;
+  vec3 color = (uColor1 * w1 + uColor2 * w2 + uColor3 * w3) / max(w1 + w2 + w3, 0.0001);
 
   float grain = hash(gl_FragCoord.xy) - 0.5;
   color += grain * uNoiseAmt;
-  color = max(color, 0.0);
+  color = clamp(color, 0.0, 1.0);
 
   gl_FragColor = vec4(color, 1.0);
 }
