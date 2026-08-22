@@ -3,12 +3,13 @@ import { GradientMesh, type GradientParams } from './components/GradientMesh'
 import { GradientControls } from './components/GradientControls'
 
 const DEFAULT_PARAMS: GradientParams = {
-  color1: '#e2483a',
-  color2: '#f3a93f',
-  color3: '#1f6fd1',
-  distortion: 1.6,
-  scale: 1.4,
-  noise: 0.05,
+  color1: '#47afff',
+  color2: '#5e68e8',
+  color3: '#4d24ae',
+  color4: '#3957c0',
+  distortion: 5,
+  zoom: 0.72,
+  noise: 0.04,
 }
 
 function App() {

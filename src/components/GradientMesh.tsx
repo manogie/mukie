@@ -5,10 +5,22 @@ export interface GradientParams {
   color1: string
   color2: string
   color3: string
+  color4: string
   distortion: number
-  scale: number
+  zoom: number
   noise: number
 }
+
+// static layout taken from monopo.london's own hero gradient, so the
+// composition matches theirs — only color/distortion/zoom/noise are tunable.
+const COLOR_SIZE = 0.58
+const COLOR_SPACING = 0.52
+const COLOR_ROTATION = -0.381592653589793
+const COLOR_SPREAD = 4.52
+const COLOR_OFFSET: [number, number] = [-0.7741174697875977, -0.20644775390624992]
+const TRANSFORM_POSITION: [number, number] = [-0.2816110610961914, -0.43914794921875]
+const SPACING = 4.27
+const NOISE_SIZE = 0.5
 
 function hexToRgb(hex: string): [number, number, number] {
   const clean = hex.replace('#', '')
@@ -18,7 +30,7 @@ function hexToRgb(hex: string): [number, number, number] {
   return [r, g, b]
 }
 
-function compileShader(gl: WebGLRenderingContext, type: number, source: string) {
+function compileShader(gl: WebGL2RenderingContext, type: number, source: string) {
   const shader = gl.createShader(type)
   if (!shader) throw new Error('Kunde inte skapa shader')
   gl.shaderSource(shader, source)
@@ -39,7 +51,7 @@ export function GradientMesh(params: GradientParams) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const gl = canvas.getContext('webgl')
+    const gl = canvas.getContext('webgl2')
     if (!gl) return
 
     const vertexShader = compileShader(gl, gl.VERTEX_SHADER, VERTEX_SHADER)
@@ -67,15 +79,23 @@ export function GradientMesh(params: GradientParams) {
     gl.enableVertexAttribArray(aPosition)
     gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0)
 
-    const uResolution = gl.getUniformLocation(program, 'uResolution')
-    const uMouse = gl.getUniformLocation(program, 'uMouse')
-    const uMouseInfluence = gl.getUniformLocation(program, 'uMouseInfluence')
+    const uViewportSize = gl.getUniformLocation(program, 'uViewportSize')
     const uColor1 = gl.getUniformLocation(program, 'uColor1')
     const uColor2 = gl.getUniformLocation(program, 'uColor2')
     const uColor3 = gl.getUniformLocation(program, 'uColor3')
-    const uDistortion = gl.getUniformLocation(program, 'uDistortion')
-    const uScale = gl.getUniformLocation(program, 'uScale')
-    const uNoiseAmt = gl.getUniformLocation(program, 'uNoiseAmt')
+    const uColor4 = gl.getUniformLocation(program, 'uColor4')
+    const uColorSize = gl.getUniformLocation(program, 'uColorSize')
+    const uColorSpacing = gl.getUniformLocation(program, 'uColorSpacing')
+    const uColorRotation = gl.getUniformLocation(program, 'uColorRotation')
+    const uColorSpread = gl.getUniformLocation(program, 'uColorSpread')
+    const uDisplacement = gl.getUniformLocation(program, 'uDisplacement')
+    const uZoom = gl.getUniformLocation(program, 'uZoom')
+    const uSpacing = gl.getUniformLocation(program, 'uSpacing')
+    const uSeed = gl.getUniformLocation(program, 'uSeed')
+    const uColorOffset = gl.getUniformLocation(program, 'uColorOffset')
+    const uTransformPosition = gl.getUniformLocation(program, 'uTransformPosition')
+    const uNoiseSize = gl.getUniformLocation(program, 'uNoiseSize')
+    const uNoiseIntensity = gl.getUniformLocation(program, 'uNoiseIntensity')
 
     let width = 0
     let height = 0
@@ -91,34 +111,50 @@ export function GradientMesh(params: GradientParams) {
     resize()
     window.addEventListener('resize', resize)
 
-    const mouse = { x: 0.5, y: 0.5 }
-    const targetMouse = { x: 0.5, y: 0.5 }
-    let influenceTarget = 0
-    let influence = 0
-    const handleMouseMove = (e: MouseEvent) => {
-      targetMouse.x = e.clientX / window.innerWidth
-      targetMouse.y = 1 - e.clientY / window.innerHeight
-      influenceTarget = 1
+    // matches monopo.london's own mapping: pointer x (0..1) drives the
+    // noise displacement strength, pointer y (0..1) drives which slice of
+    // the 3D noise field is sampled (the "seed"). pointermove covers mouse,
+    // touch-drag and pen alike, so it works on phones/tablets too.
+    let hasMoved = false
+    let targetForce = 0
+    let targetSeed = 0
+    let force = 0
+    let seed = 0
+
+    const handlePointerMove = (e: PointerEvent) => {
+      hasMoved = true
+      const x = e.clientX / window.innerWidth
+      const y = e.clientY / window.innerHeight
+      targetForce = x * paramsRef.current.distortion
+      targetSeed = -1 + 2 * y
     }
-    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('pointermove', handlePointerMove)
 
     let frame: number
 
     const render = () => {
-      const p = paramsRef.current
-      mouse.x += (targetMouse.x - mouse.x) * 0.08
-      mouse.y += (targetMouse.y - mouse.y) * 0.08
-      influence += (influenceTarget - influence) * 0.08
+      force += (targetForce - force) * 0.1
+      seed += (targetSeed - seed) * 0.1
 
-      gl.uniform2f(uResolution, width, height)
-      gl.uniform2f(uMouse, mouse.x, mouse.y)
-      gl.uniform1f(uMouseInfluence, influence)
+      const p = paramsRef.current
+
+      gl.uniform2f(uViewportSize, width, height)
       gl.uniform3fv(uColor1, hexToRgb(p.color1))
       gl.uniform3fv(uColor2, hexToRgb(p.color2))
       gl.uniform3fv(uColor3, hexToRgb(p.color3))
-      gl.uniform1f(uDistortion, p.distortion)
-      gl.uniform1f(uScale, p.scale)
-      gl.uniform1f(uNoiseAmt, p.noise)
+      gl.uniform3fv(uColor4, hexToRgb(p.color4))
+      gl.uniform1f(uColorSize, COLOR_SIZE)
+      gl.uniform1f(uColorSpacing, COLOR_SPACING)
+      gl.uniform1f(uColorRotation, COLOR_ROTATION)
+      gl.uniform1f(uColorSpread, COLOR_SPREAD)
+      gl.uniform1f(uDisplacement, hasMoved ? force : 0)
+      gl.uniform1f(uZoom, p.zoom)
+      gl.uniform1f(uSpacing, SPACING)
+      gl.uniform1f(uSeed, hasMoved ? seed : 0)
+      gl.uniform2f(uColorOffset, COLOR_OFFSET[0], COLOR_OFFSET[1])
+      gl.uniform2f(uTransformPosition, TRANSFORM_POSITION[0], TRANSFORM_POSITION[1])
+      gl.uniform1f(uNoiseSize, NOISE_SIZE)
+      gl.uniform1f(uNoiseIntensity, p.noise)
 
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
       frame = requestAnimationFrame(render)
@@ -128,7 +164,7 @@ export function GradientMesh(params: GradientParams) {
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', resize)
-      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('pointermove', handlePointerMove)
     }
   }, [])
 
