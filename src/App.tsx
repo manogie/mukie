@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { GradientMesh, type GradientParams } from './components/GradientMesh'
 import { GradientControls } from './components/GradientControls'
+import { DebugOverlay } from './components/DebugOverlay'
 
 const DEFAULT_PARAMS: GradientParams = {
   color1: '#47afff',
@@ -25,6 +26,7 @@ function App() {
         {...params}
         onChange={(patch) => setParams((prev) => ({ ...prev, ...patch }))}
       />
+      <DebugOverlay />
     </div>
   )
 }
