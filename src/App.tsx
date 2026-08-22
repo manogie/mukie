@@ -16,7 +16,7 @@ function App() {
   const [params, setParams] = useState<GradientParams>(DEFAULT_PARAMS)
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
+    <div className="relative flex min-h-svh items-center justify-center overflow-hidden">
       <GradientMesh {...params} />
       <h1 className="relative z-10" style={{ color: '#ffffff' }}>
         Här var det text

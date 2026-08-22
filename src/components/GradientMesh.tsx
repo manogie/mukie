@@ -102,14 +102,29 @@ export function GradientMesh(params: GradientParams) {
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5)
 
     const resize = () => {
-      width = Math.floor(window.innerWidth * pixelRatio)
-      height = Math.floor(window.innerHeight * pixelRatio)
+      const cssWidth = window.innerWidth
+      const cssHeight = window.innerHeight
+      width = Math.floor(cssWidth * pixelRatio)
+      height = Math.floor(cssHeight * pixelRatio)
       canvas.width = width
       canvas.height = height
+      // set the CSS box size explicitly in pixels rather than relying on
+      // percentage sizing — iOS Safari can miscompute a fixed-position
+      // element's percentage width/height right after an orientation change.
+      canvas.style.width = `${cssWidth}px`
+      canvas.style.height = `${cssHeight}px`
       gl.viewport(0, 0, width, height)
     }
     resize()
     window.addEventListener('resize', resize)
+    // iOS Safari can briefly report stale window dimensions right when
+    // orientationchange fires, before layout has settled — re-check shortly after.
+    const handleOrientationChange = () => {
+      resize()
+      setTimeout(resize, 150)
+      setTimeout(resize, 400)
+    }
+    window.addEventListener('orientationchange', handleOrientationChange)
 
     // matches monopo.london's own mapping: pointer x (0..1) drives the
     // noise displacement strength, pointer y (0..1) drives which slice of
@@ -164,6 +179,7 @@ export function GradientMesh(params: GradientParams) {
     return () => {
       cancelAnimationFrame(frame)
       window.removeEventListener('resize', resize)
+      window.removeEventListener('orientationchange', handleOrientationChange)
       window.removeEventListener('pointermove', handlePointerMove)
     }
   }, [])
