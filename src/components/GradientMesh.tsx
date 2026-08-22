@@ -101,30 +101,30 @@ export function GradientMesh(params: GradientParams) {
     let height = 0
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5)
 
-    const resize = () => {
-      const cssWidth = window.innerWidth
-      const cssHeight = window.innerHeight
+    // measure the actual rendered box of the canvas's own container rather
+    // than window.innerWidth/innerHeight — ResizeObserver reports the real
+    // post-layout size and isn't affected by mobile browsers' unreliable
+    // resize/orientationchange timing around toolbars and rotation.
+    const resize = (cssWidth: number, cssHeight: number) => {
       width = Math.floor(cssWidth * pixelRatio)
       height = Math.floor(cssHeight * pixelRatio)
       canvas.width = width
       canvas.height = height
-      // set the CSS box size explicitly in pixels rather than relying on
-      // percentage sizing — iOS Safari can miscompute a fixed-position
-      // element's percentage width/height right after an orientation change.
       canvas.style.width = `${cssWidth}px`
       canvas.style.height = `${cssHeight}px`
       gl.viewport(0, 0, width, height)
     }
-    resize()
-    window.addEventListener('resize', resize)
-    // iOS Safari can briefly report stale window dimensions right when
-    // orientationchange fires, before layout has settled — re-check shortly after.
-    const handleOrientationChange = () => {
-      resize()
-      setTimeout(resize, 150)
-      setTimeout(resize, 400)
-    }
-    window.addEventListener('orientationchange', handleOrientationChange)
+
+    const parent = canvas.parentElement
+    const initialRect = parent?.getBoundingClientRect()
+    resize(initialRect?.width || window.innerWidth, initialRect?.height || window.innerHeight)
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      resize(entry.contentRect.width, entry.contentRect.height)
+    })
+    if (parent) resizeObserver.observe(parent)
 
     // matches monopo.london's own mapping: pointer x (0..1) drives the
     // noise displacement strength, pointer y (0..1) drives which slice of
@@ -178,8 +178,7 @@ export function GradientMesh(params: GradientParams) {
 
     return () => {
       cancelAnimationFrame(frame)
-      window.removeEventListener('resize', resize)
-      window.removeEventListener('orientationchange', handleOrientationChange)
+      resizeObserver.disconnect()
       window.removeEventListener('pointermove', handlePointerMove)
     }
   }, [])
@@ -187,7 +186,7 @@ export function GradientMesh(params: GradientParams) {
   return (
     <canvas
       ref={canvasRef}
-      className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full"
     />
   )
 }
